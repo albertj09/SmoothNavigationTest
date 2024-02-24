@@ -70,10 +70,10 @@ TArray<FVector> AATestingNavigatingActor::SmoothPath(FNavPathSharedPtr path)
 		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Cyan, TEXT("SmoothPathRecalculation..."));
 
 		UNavigationSystemV1* navSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
-		ARecastNavMesh* navMesh = Cast<ARecastNavMesh>(UNavigationSystemV1::GetCurrent(GetWorld())->GetDefaultNavDataInstance());
+		ARecastNavMesh* recastNavMesh = Cast<ARecastNavMesh>(UNavigationSystemV1::GetCurrent(GetWorld())->GetDefaultNavDataInstance());
 
 		ensure(navSys);
-		ensure(navMesh);
+		ensure(recastNavMesh);
 
 		TArray<FNavPathPoint> navPathPoints = navPath->GetPathPoints();
 		TArray<FVector> navPoints;
@@ -89,23 +89,24 @@ TArray<FVector> AATestingNavigatingActor::SmoothPath(FNavPathSharedPtr path)
 		// Draw the optimal non smoothed engine path
 		DebugDrawNavigationPath(navPoints, FColor::Blue);
 
-		////MIDPOINTS IMPLEMENTATION (shown in the report but unused)
-		//TArray<FVector> polygonMidpointSegments;
-		//TArray<FNavigationPortalEdge> pathCorridorEdges;
-		//FNavMeshPath* NavMeshPath = static_cast<FNavMeshPath*>(Path.Get());
-		//if (NavMeshPath)
-		//{
-		//	// Get the corridor edges from the path
-		//	pathCorridorEdges = NavMeshPath->GetPathCorridorEdges();
-		//}
-
-		//// Generate an alternative path using corridor segment midpoints
-		//polygonMidpointSegments.Emplace(navPoints[0]);
-		//for (auto& pathCorridorEdge : pathCorridorEdges)
-		//{
-		//	polygonMidpointSegments.Emplace(pathCorridorEdge.GetMiddlePoint());
-		//}
-		//polygonMidpointSegments.Emplace(navPoints.Last());
+		//MIDPOINTS IMPLEMENTATION (shown in the report but unused)
+		// TArray<FVector> polygonMidpointSegments;
+		// TArray<FNavigationPortalEdge> pathCorridorEdges;
+		// FNavMeshPath* NavMeshPath = static_cast<FNavMeshPath*>(path.Get());
+		//
+		// if (NavMeshPath)
+		// {
+		// 	// Get the corridor edges from the path
+		// 	pathCorridorEdges = NavMeshPath->GetPathCorridorEdges();
+		// }
+		//
+		// // Generate an alternative path using corridor segment midpoints
+		// polygonMidpointSegments.Emplace(navPoints[0]);
+		// for (auto& pathCorridorEdge : pathCorridorEdges)
+		// {
+		// 	polygonMidpointSegments.Emplace(pathCorridorEdge.GetMiddlePoint());
+		// }
+		// polygonMidpointSegments.Emplace(navPoints.Last());
 
 		// Smoothing of the points
 		//BEZIER
@@ -127,18 +128,26 @@ TArray<FVector> AATestingNavigatingActor::SmoothPath(FNavPathSharedPtr path)
 
 			const float halfDistance = FVector::Dist(currentP, nextP) / 2.0f;
 			bias.Normalize();
-			bias *= (halfDistance / 1.3);
+			bias *= (halfDistance);
 			bias += currentP;
 
-			/*DrawDebugLine(GetWorld(), currentP, bias, FColor::Red, true, -1.f, 0);
-			DrawDebugPoint(GetWorld(), bias, 16.f, FColor::Red, true, -1.f, 0);*/
+			// Check if the bias point is outside of navmesh
+			FNavLocation projectedBiasPoint;
+			if (!navSys->ProjectPointToNavigation(bias, projectedBiasPoint))
+			{
+				continue;
+			}
+
+			DrawDebugLine(GetWorld(), currentP, bias, FColor::Red, true, -1.f, 0);
+			DrawDebugPoint(GetWorld(), bias, 16.f, FColor::Red, true, -1.f, 0);
 
 			for (float t = 0.0; t <= 1.0; t += 0.1f) {
 				FVector pointOnCurve = GetBezierPoint(t, currentP, bias, nextP);
 				FNavLocation projectedPointOnCurve;
-
-				// Prevent out of navmesh boundaries... This is a bad way but I am not sure how to do it with corridor edges
-				if (navSys->ProjectPointToNavigation(pointOnCurve, projectedPointOnCurve)) {
+				
+				// Prevent out of navmesh boundaries...
+				if (navSys->ProjectPointToNavigation(pointOnCurve, projectedPointOnCurve))
+				{
 					bezierSmoothedLocations.Emplace(projectedPointOnCurve);
 				}
 			}
