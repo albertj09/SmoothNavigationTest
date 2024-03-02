@@ -9,6 +9,7 @@
 
 class UDebugStringsComponent;
 class AGoalActor;
+class ARecastNavMesh;
 
 UENUM(BlueprintType)
 enum class ENavPathDrawType : uint8 {
@@ -110,4 +111,7 @@ protected:
 	// Simple debug draw for the generated path
 	void DebugDrawNavigationPath(const TArray<FVector>& pathPoints, const FColor& color) const;
 	void DebugDrawNavigationPath(const TArray<FNavPathPoint>& pathPoints, const FColor& color) const;
+
+	// Custom helper functions
+	void GetClosestPointOnNearbyPolys(ARecastNavMesh* recastNavMesh, NavNodeRef originalPoly, const FVector& testPt, FVector& pointOnPoly);
 };
