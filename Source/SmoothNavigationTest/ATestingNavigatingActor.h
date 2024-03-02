@@ -4,8 +4,10 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Math/UnrealMathUtility.h"
 #include "ATestingNavigatingActor.generated.h"
 
+class UDebugStringsComponent;
 class AGoalActor;
 
 UENUM(BlueprintType)
@@ -15,6 +17,30 @@ enum class ENavPathDrawType : uint8 {
 	PointsAndLines = 2	UMETA(DisplayName = "Points And Lines"),
 };
 
+enum class EAngleUnits : uint8 {
+	Degrees = 0,
+	Radians = 1	
+};
+
+
+struct FCustomNavPathPoint 
+{
+	FNavPathPoint NavPathPoint;
+	bool bSkipPathPoint = false;
+
+	FCustomNavPathPoint(const FNavPathPoint& InNavPathPoint, bool InSkipPathPoint) : NavPathPoint(InNavPathPoint), bSkipPathPoint(InSkipPathPoint) {}
+};
+
+template <typename VectorType>
+float GetAngleBetweenUnitVectors(const VectorType& a, const VectorType& b, EAngleUnits units = EAngleUnits::Radians)
+{
+	static_assert(std::is_same_v<FVector, VectorType>, "Only vector types supported");
+	
+	const float dotProduct = FVector::DotProduct(a, b);
+	const float angleInRadians = FMath::Acos(dotProduct);
+	return units == EAngleUnits::Radians ? angleInRadians : FMath::RadiansToDegrees(angleInRadians);
+}
+
 template<typename T>
 inline T GetBezierPoint(float t, T P0, T P1, T P2) {
 	float u = 1 - t;
@@ -23,6 +49,20 @@ inline T GetBezierPoint(float t, T P0, T P1, T P2) {
 	T P = uu * P0;
 	P += 2 * u * t * P1;
 	P += tt * P2;
+	return P;
+}
+
+template<typename T>
+inline T GetCubicBezierPoint(float t, T P0, T P1, T P2, T P3) {
+	float u = 1 - t;
+	float tt = t * t;
+	float uu = u * u;
+	float uuu = uu * u;
+	float ttt = tt * t;
+	T P = uuu * P0; 
+	P += 3 * uu * t * P1; 
+	P += 3 * u * tt * P2; 
+	P += ttt * P3; 
 	return P;
 }
 
@@ -37,6 +77,9 @@ public:
 
 	UPROPERTY(EditAnywhere)
 	TObjectPtr<UStaticMeshComponent> MeshComponent = nullptr;
+
+	UPROPERTY(EditAnywhere)
+	TObjectPtr<UDebugStringsComponent> DebugStringsComponent = nullptr;
 
 	UPROPERTY(EditAnywhere)
 	TObjectPtr<AGoalActor> GoalActor = nullptr;
@@ -66,4 +109,5 @@ protected:
 
 	// Simple debug draw for the generated path
 	void DebugDrawNavigationPath(const TArray<FVector>& pathPoints, const FColor& color) const;
+	void DebugDrawNavigationPath(const TArray<FNavPathPoint>& pathPoints, const FColor& color) const;
 };
