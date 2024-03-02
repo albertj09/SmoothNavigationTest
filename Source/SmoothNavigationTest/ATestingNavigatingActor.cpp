@@ -98,19 +98,24 @@ TArray<FVector> AATestingNavigatingActor::SmoothPath(FNavPathSharedPtr path)
 
 			// Experimental bias. We need to start with some sort of curve.
 			FNavPathPoint currentP = navPathPoints[i];
+			if(!bezierSmoothedLocations.IsEmpty())
+			{
+				currentP.Location = bezierSmoothedLocations[bezierSmoothedLocations.Num() - 1];
+			}
 			FNavPathPoint nextP = navPathPoints[i + 1];
-			FVector experimentalBias = nextP.Location - currentP.Location;
 
 			//Sample current segment direction
-			FVector currentSegmentDir = experimentalBias;
+			FVector currentSegmentDir = nextP.Location - currentP.Location;
 			currentSegmentDir.Normalize();
-			
+
+			FVector experimentalBias = nextP.Location - currentP.Location;
 			// Sample experimental bias from actual plotted interpolated points instead if we already have some.
 			if (bezierSmoothedLocations.Num() > 1) {
 				experimentalBias = bezierSmoothedLocations[bezierSmoothedLocations.Num() - 1] - bezierSmoothedLocations[bezierSmoothedLocations.Num() - 2];
 			}
 			
 			// We plot this bias point at (previous points direction * half of segment distance + current point location)
+			//experimentalBias /= 2;
 			const float currentSegmentHalfDistance = FVector::Dist(currentP.Location, nextP.Location) / 2.0f;
 			experimentalBias.Normalize();
 			experimentalBias *= currentSegmentHalfDistance;
@@ -135,9 +140,7 @@ TArray<FVector> AATestingNavigatingActor::SmoothPath(FNavPathSharedPtr path)
 			}
 			
 			// Direction bias at next point
-			//FVector experimentalPointOnCurve = FAISystem::IsValidLocation(experimentalBias2) ? GetCubicBezierPoint(0.9, currentP.Location, experimentalBias, experimentalBias2, nextP.Location) : GetBezierPoint(0.9, currentP.Location, experimentalBias, nextP.Location);
-			FVector experimentalPointOnCurve = GetBezierPoint(0.8, currentP.Location, experimentalBias, nextP.Location);
-
+			FVector experimentalPointOnCurve = FAISystem::IsValidLocation(experimentalBias2) ? GetCubicBezierPoint(0.8, currentP.Location, experimentalBias, experimentalBias2, nextP.Location) : GetBezierPoint(0.9, currentP.Location, experimentalBias, nextP.Location);
 			FVector directionBias = nextP.Location - experimentalPointOnCurve;
 			directionBias.Normalize();
 
@@ -149,9 +152,8 @@ TArray<FVector> AATestingNavigatingActor::SmoothPath(FNavPathSharedPtr path)
 			{
 				DebugStringsComponent->DrawDebugStringAtLocation(FString::SanitizeFloat(angle), FColor::White, 1.f, nextP.Location + FVector(0,0, 50));
 			}
-
 			
-			// if(angle < 18.f)
+			// if(angle < 5.f)
 			// {
 			// 	if(i + 2 < navPathPoints.Num())
 			// 	{
@@ -175,6 +177,10 @@ TArray<FVector> AATestingNavigatingActor::SmoothPath(FNavPathSharedPtr path)
 
 			DrawDebugLine(GetWorld(), currentP.Location, experimentalBias, FColor::Red, true, -1.f, 0);
 			DrawDebugPoint(GetWorld(), experimentalBias, 16.f, FColor::Red, true, -1.f, 0);
+
+			//Apply a little offset to next point. It behaves well with bezier curves where there can be some inconsistencies at key points.
+			nextP.Location = nextP.Location + (currentSegmentDir * 25.f);
+			DrawDebugPoint(GetWorld(), nextP.Location, 22.f, FColor::Green, true, -1.f, 0);
 			
 			for (float t = 0.0; t <= 1.0; t += 0.1f) {
 				FVector pointOnCurve = FAISystem::IsValidLocation(experimentalBias2) ?  GetCubicBezierPoint(t, currentP.Location, experimentalBias, experimentalBias2, nextP.Location) : GetBezierPoint(t, currentP.Location, experimentalBias, nextP.Location);
