@@ -23,15 +23,6 @@ enum class EAngleUnits : uint8 {
 	Radians = 1	
 };
 
-
-struct FCustomNavPathPoint 
-{
-	FNavPathPoint NavPathPoint;
-	bool bSkipPathPoint = false;
-
-	FCustomNavPathPoint(const FNavPathPoint& InNavPathPoint, bool InSkipPathPoint) : NavPathPoint(InNavPathPoint), bSkipPathPoint(InSkipPathPoint) {}
-};
-
 template <typename VectorType>
 float GetAngleBetweenUnitVectors(const VectorType& a, const VectorType& b, EAngleUnits units = EAngleUnits::Radians)
 {
@@ -67,6 +58,56 @@ inline T GetCubicBezierPoint(float t, T P0, T P1, T P2, T P3) {
 	return P;
 }
 
+USTRUCT(BlueprintType)
+struct FSmoothNavPathConfig
+{
+	GENERATED_BODY()
+
+	// How far along the direction vector will the first bias point be offset (resulting distance = full distance * Bias1_DistanceScalar)
+	UPROPERTY(EditAnywhere, Category="First Bias", meta=(ClampMin=0.1, ClampMax=1.f, UIMin = 0.1, UIMax = 1.f))
+	float Bias1_DistanceScalar = 0.5f;
+
+	// Max distance of how far along the direction vector will the second bias point be offset
+	UPROPERTY(EditAnywhere, Category="Second Bias", meta=(ClampMin=0.0, UIMin = 0.0, UIMax = 500.f))
+	float Bias2_MaxDistanceOffset = 220.f;
+
+	// Min distance of how far along the direction vector will the second bias point be offset
+	UPROPERTY(EditAnywhere, Category="Second Bias", meta=(ClampMin=0.0, UIMin = 0.0, UIMax = 300.f))
+	float Bias2_MinDistanceOffset = 80.f;
+
+	// A configurable threshold for when the smooth path should attempt to skip certain nav points to maintain a smoother integrity (VERY EXPERIMENTAL)
+	UPROPERTY(EditAnywhere, Category="Nav Point Skipping", meta=(InlineEditConditionToggle))
+	bool bNavPointSkipping = false;
+
+	// A configurable threshold for when the smooth path should attempt to skip certain nav points to maintain a smoother integrity (VERY EXPERIMENTAL)
+	UPROPERTY(EditAnywhere, Category="Nav Point Skipping", meta=(EditCondition="bNavPointSkipping", ClampMin=0.f, UIMin = 0.f, UIMax = 90.f))
+	float MinAngleSkipThreshold = 5.f;
+
+	// A small offset to apply to next point in order to smooth out the turns more and avoid some inconsistencies
+	UPROPERTY(EditAnywhere, meta=(ClampMin=0.f, UIMin = 0.f, UIMax = 100.f))
+	float NextPointOffset = 25.0f;
+
+	// Return to default smooth path config values
+	UPROPERTY(EditAnywhere)
+	bool bResetToDefaultConfigValues = false;
+
+	// Extra debugging information. For now I am just toggling everything, but it's going to be separated out in the future
+	UPROPERTY(EditAnywhere, Category="Debugging")
+	bool bEnableExtraDebugInfo = false;
+
+	void ResetToDefaults()
+	{
+		Bias1_DistanceScalar = 0.5f;
+		Bias2_MaxDistanceOffset = 220.f;
+		Bias2_MinDistanceOffset = 80.f;
+		bNavPointSkipping = false;
+		MinAngleSkipThreshold = 5.f;
+		NextPointOffset = 25.0f;
+		bResetToDefaultConfigValues = false;
+		bEnableExtraDebugInfo = false;
+	}
+};
+
 UCLASS()
 class SMOOTHNAVIGATIONTEST_API AATestingNavigatingActor : public AActor
 {
@@ -79,21 +120,24 @@ public:
 	UPROPERTY(EditAnywhere)
 	TObjectPtr<UStaticMeshComponent> MeshComponent = nullptr;
 
-	UPROPERTY(EditAnywhere)
+	UPROPERTY()
 	TObjectPtr<UDebugStringsComponent> DebugStringsComponent = nullptr;
 
-	UPROPERTY(EditAnywhere)
+	UPROPERTY(EditAnywhere, Category="Smooth Path")
 	TObjectPtr<AGoalActor> GoalActor = nullptr;
 
-	UPROPERTY(EditAnywhere)
+	UPROPERTY(EditAnywhere, Category="Smooth Path")
 	bool bRecalculateSmoothPath = false;
 
-	UPROPERTY(EditAnywhere)
+	UPROPERTY(EditAnywhere, Category="Smooth Path|Debug")
 	ENavPathDrawType NavPathDrawType = ENavPathDrawType::Points;
+
+	UPROPERTY(EditAnywhere, Category="Smooth Path")
+	FSmoothNavPathConfig SmoothPathConfigurator;
 
 	/** "None" will result in default filter being used */
 	UPROPERTY(EditAnywhere, Category = Pathfinding)
-	TSubclassOf<class UNavigationQueryFilter> NavigationFilterClass;
+	TSubclassOf<UNavigationQueryFilter> NavigationFilterClass;
 
 protected:
 
@@ -114,4 +158,16 @@ protected:
 
 	// Custom helper functions
 	void GetClosestPointOnNearbyPolys(ARecastNavMesh* recastNavMesh, NavNodeRef originalPoly, const FVector& testPt, FVector& pointOnPoly);
+	bool CheckIfSegmentIsFullyOnNavmesh(const FVector& segmentStart, const FVector& segmentEnd, FVector& hitLocation) const;
+
+private:
+
+	UPROPERTY()
+	TObjectPtr<ANavigationData> NavigationData = nullptr;
+
+	UPROPERTY()
+	TObjectPtr<UNavigationSystemV1> NavSystem = nullptr;
+
+	UPROPERTY()
+	TObjectPtr<ARecastNavMesh> RecastNavMesh = nullptr;
 };
