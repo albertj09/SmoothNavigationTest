@@ -7,6 +7,7 @@
 #include "Math/UnrealMathUtility.h"
 #include "ATestingNavigatingActor.generated.h"
 
+class UNavigationSystemV1;
 class UDebugStringsComponent;
 class AGoalActor;
 class ARecastNavMesh;
@@ -68,24 +69,24 @@ struct FSmoothNavPathConfig
 	float Bias1_DistanceScalar = 0.5f;
 
 	// Max distance of how far along the direction vector will the second bias point be offset
-	UPROPERTY(EditAnywhere, Category="Second Bias", meta=(ClampMin=0.0, UIMin = 0.0, UIMax = 500.f))
-	float Bias2_MaxDistanceOffset = 220.f;
+	UPROPERTY(EditAnywhere, Category="Second Bias", meta=(ClampMin=0.0, UIMin = 0.0, UIMax = 1000.f))
+	float Bias2_MaxDistanceOffset = 500.f;
 
 	// Min distance of how far along the direction vector will the second bias point be offset
 	UPROPERTY(EditAnywhere, Category="Second Bias", meta=(ClampMin=0.0, UIMin = 0.0, UIMax = 300.f))
-	float Bias2_MinDistanceOffset = 80.f;
+	float Bias2_MinDistanceOffset = 50.f;
 
 	// A configurable threshold for when the smooth path should attempt to skip certain nav points to maintain a smoother integrity (VERY EXPERIMENTAL)
 	UPROPERTY(EditAnywhere, Category="Nav Point Skipping", meta=(InlineEditConditionToggle))
-	bool bNavPointSkipping = false;
+	bool bNavPointSkipping = true;
 
 	// A configurable threshold for when the smooth path should attempt to skip certain nav points to maintain a smoother integrity (VERY EXPERIMENTAL)
 	UPROPERTY(EditAnywhere, Category="Nav Point Skipping", meta=(EditCondition="bNavPointSkipping", ClampMin=0.f, UIMin = 0.f, UIMax = 90.f))
-	float MinAngleSkipThreshold = 5.f;
+	float MinAngleSkipThreshold = 20.f;
 
 	// A small offset to apply to next point in order to smooth out the turns more and avoid some inconsistencies
 	UPROPERTY(EditAnywhere, meta=(ClampMin=0.f, UIMin = 0.f, UIMax = 100.f))
-	float NextPointOffset = 25.0f;
+	float NextPointOffset = 50.0f;
 
 	// Return to default smooth path config values
 	UPROPERTY(EditAnywhere)
@@ -98,11 +99,11 @@ struct FSmoothNavPathConfig
 	void ResetToDefaults()
 	{
 		Bias1_DistanceScalar = 0.5f;
-		Bias2_MaxDistanceOffset = 220.f;
-		Bias2_MinDistanceOffset = 80.f;
-		bNavPointSkipping = false;
-		MinAngleSkipThreshold = 5.f;
-		NextPointOffset = 25.0f;
+		Bias2_MaxDistanceOffset = 500.f;
+		Bias2_MinDistanceOffset = 50.f;
+		bNavPointSkipping = true;
+		MinAngleSkipThreshold = 20.f;
+		NextPointOffset = 50.0f;
 		bResetToDefaultConfigValues = false;
 		bEnableExtraDebugInfo = false;
 	}
@@ -157,9 +158,11 @@ protected:
 	void DebugDrawNavigationPath(const TArray<FNavPathPoint>& pathPoints, const FColor& color) const;
 
 	// Custom helper functions
-	void GetClosestPointOnNearbyPolys(ARecastNavMesh* recastNavMesh, NavNodeRef originalPoly, const FVector& testPt, FVector& pointOnPoly);
-	bool CheckIfSegmentIsFullyOnNavmesh(const FVector& segmentStart, const FVector& segmentEnd, FVector& hitLocation) const;
-
+	void GetClosestPointOnNearbyPolys(NavNodeRef originalPoly, const FVector& testPt, FVector& pointOnPoly) const;
+	bool IsSegmentIsFullyOnNavmesh(const FVector& segmentStart, const FVector& segmentEnd, FVector& hitLocation) const;
+	bool IsSegmentIsFullyOnNavmesh(const FVector& segmentStart, const FVector& segmentEnd) const;
+	void CalculateFirstBiasPoint(FVector& bias, const FNavPathPoint& currentPoint, const FNavPathPoint& nextPoint, const TArray<FNavPathPoint>& originalPathPoints, const TArray<FVector>& smoothPathPoints) const;
+	
 private:
 
 	UPROPERTY()
