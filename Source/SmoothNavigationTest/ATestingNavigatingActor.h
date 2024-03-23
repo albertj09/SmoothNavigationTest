@@ -161,7 +161,8 @@ protected:
 	void GetClosestPointOnNearbyPolys(NavNodeRef originalPoly, const FVector& testPt, FVector& pointOnPoly) const;
 	bool IsSegmentIsFullyOnNavmesh(const FVector& segmentStart, const FVector& segmentEnd, FVector& hitLocation) const;
 	bool IsSegmentIsFullyOnNavmesh(const FVector& segmentStart, const FVector& segmentEnd) const;
-	void CalculateFirstBiasPoint(FVector& bias, const FNavPathPoint& currentPoint, const FNavPathPoint& nextPoint, const TArray<FNavPathPoint>& originalPathPoints, const TArray<FVector>& smoothPathPoints) const;
+	void CalculateFirstBiasPoint(FVector& bias, const FNavPathPoint& currentPoint, const FNavPathPoint& nextPoint, FNavPathSharedPtr originalPathSharedPtr, const TArray<FVector>& smoothPathPoints) const;
+	void GetSafeBiasLocation(FVector& bias, FNavPathSharedPtr path, const FNavPathPoint& currentPoint, const FNavPathPoint& nextPoint) const;
 	
 private:
 

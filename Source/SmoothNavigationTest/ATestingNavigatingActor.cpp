@@ -82,7 +82,7 @@ TArray<FVector> AATestingNavigatingActor::SmoothPath(FNavPathSharedPtr path)
 	if (FNavigationPath* navPath = path.Get()) 
 	{
 		RecastNavMesh = Cast<ARecastNavMesh>(NavigationData);
-
+		
 		// Redundant really, but paranoia
 		ensure(NavSystem);
 		ensure(RecastNavMesh);
@@ -118,12 +118,12 @@ TArray<FVector> AATestingNavigatingActor::SmoothPath(FNavPathSharedPtr path)
 			FNavPathPoint nextP = navPathPoints[i + 1];
 
 			//Sample current segment direction
-			FVector currentSegmentDir = nextP.Location - currentP.Location;
+			FVector currentSegmentDir = nextP.Location - navPathPoints[i].Location;
 			currentSegmentDir.Normalize();
 
 			// First experimental bias 
 			FVector experimentalBias = nextP.Location - currentP.Location;
-			CalculateFirstBiasPoint(experimentalBias, currentP, nextP, navPathPoints, bezierSmoothedLocations);
+			CalculateFirstBiasPoint(experimentalBias, currentP, nextP, path, bezierSmoothedLocations);
 
 			// Second experimental bias. I am sampling the direction vector of the next segment and invert it in order to choose a decent location for the second bias.
 			// This algorithm ensures that the angles will not be too sharp since it will curve out slightly before curving into the turning point.
@@ -148,7 +148,7 @@ TArray<FVector> AATestingNavigatingActor::SmoothPath(FNavPathSharedPtr path)
 					nextP = nextNextP;
 
 					// Recalculate first bias
-					CalculateFirstBiasPoint(experimentalBias, currentP, nextP, navPathPoints, bezierSmoothedLocations);
+					CalculateFirstBiasPoint(experimentalBias, currentP, nextP, path, bezierSmoothedLocations);
 
 					// Recalculate current direction
 					currentSegmentDir = nextP.Location - currentP.Location;
@@ -176,31 +176,25 @@ TArray<FVector> AATestingNavigatingActor::SmoothPath(FNavPathSharedPtr path)
 				}
 
 				// Determine the second bias position offset based on the angle. Sharper angles usually need a larger offset 
-				float distanceOffset = UKismetMathLibrary::MapRangeClamped(angle, 0.f, 110.f, SmoothPathConfigurator.Bias2_MinDistanceOffset, SmoothPathConfigurator.Bias2_MaxDistanceOffset);
+				float distanceOffset = UKismetMathLibrary::MapRangeClamped(angle, 0.f, 90.f, SmoothPathConfigurator.Bias2_MinDistanceOffset, SmoothPathConfigurator.Bias2_MaxDistanceOffset);
 				experimentalBias2 = nextSegmentDir;
 				experimentalBias2 *= -1;
 				experimentalBias2 *= distanceOffset;
 				experimentalBias2 += nextP.Location;
 			}
 			
-			// Adjust the first bias in case it's outside of navmesh
-			FVector testLocBias1;
-			if(!IsSegmentIsFullyOnNavmesh(currentP.Location, experimentalBias, testLocBias1))
-			{
-				experimentalBias = testLocBias1;
-			}
-			
 			// Adjust the second bias in case it's outside of navmesh
 			FVector testLocBias2;
 			if(FAISystem::IsValidLocation(experimentalBias2) && !IsSegmentIsFullyOnNavmesh(nextP.Location, experimentalBias2, testLocBias2))
 			{
+				DebugStringsComponent->DrawDebugStringAtLocation(TEXT("SEGMENT OUT OF BOUNDS!"), FColor::Emerald, 1.5f, experimentalBias2);
 				experimentalBias2 = testLocBias2;
 			}
 			
 			// Apply a little offset to next point. It behaves well with bezier curves where there can be some inconsistencies at key points depending on the bias of the next bezier curve segment.
 			// Tiny additional offset because if nav point is perfectly at the angle of navbounds, the nav raycast can fail due to precision
-			constexpr float miniOffset = 10.f;
-			FVector nextPointLocWithOffset = nextP.Location + currentSegmentDir * (SmoothPathConfigurator.NextPointOffset + miniOffset);
+			constexpr float miniOffsetNextPoint = 10.f;
+			FVector nextPointLocWithOffset = nextP.Location + currentSegmentDir * (SmoothPathConfigurator.NextPointOffset + miniOffsetNextPoint);
 			
 			// Adjust the next point offset in case it's outside of navmesh
 			FVector testNextPointLocWithOffset;
@@ -213,7 +207,7 @@ TArray<FVector> AATestingNavigatingActor::SmoothPath(FNavPathSharedPtr path)
 				// Otherwise the vector segment is on the navmesh
 				nextP.Location = nextPointLocWithOffset;
 			}
-
+			
 			// More debugging
 			if(SmoothPathConfigurator.bEnableExtraDebugInfo)
 			{
@@ -221,7 +215,7 @@ TArray<FVector> AATestingNavigatingActor::SmoothPath(FNavPathSharedPtr path)
 				DrawDebugPoint(GetWorld(), nextP.Location, 22.f, FColor::Green, true, -1.f, 0);
 
 				// Bias 1
-				DrawDebugLine(GetWorld(), currentP.Location, experimentalBias, FColor::Red, true, -1.f, 0);
+				DrawDebugLine(GetWorld(), currentP.Location, experimentalBias, FColor::Red, true, -1.f, 0, 4.f);
 				DrawDebugPoint(GetWorld(), experimentalBias, 22.f, FColor::Red, true, -1.f, 0);
 
 				// Bias 2
@@ -333,7 +327,7 @@ bool AATestingNavigatingActor::IsSegmentIsFullyOnNavmesh(const FVector& segmentS
 	return !RecastNavMesh->Raycast(segmentStart, segmentEnd, dummyHitLoc, NavigationData->GetDefaultQueryFilter());
 }
 
-void AATestingNavigatingActor::CalculateFirstBiasPoint(FVector& bias, const FNavPathPoint& currentPoint,const FNavPathPoint& nextPoint, const TArray<FNavPathPoint>& originalPathPoints, const TArray<FVector>& smoothPathPoints) const
+void AATestingNavigatingActor::CalculateFirstBiasPoint(FVector& bias, const FNavPathPoint& currentPoint,const FNavPathPoint& nextPoint, FNavPathSharedPtr originalPathSharedPtr, const TArray<FVector>& smoothPathPoints) const
 {
 	bias = nextPoint.Location - currentPoint.Location;
 	
@@ -347,5 +341,53 @@ void AATestingNavigatingActor::CalculateFirstBiasPoint(FVector& bias, const FNav
 	bias.Normalize();
 	bias *= currentSegmentDistanceOffset;
 	bias += currentPoint.Location;
+
+	// Adjust the first bias in case it's outside of navmesh
+	FVector testLocBias1;
+	if(!IsSegmentIsFullyOnNavmesh(currentPoint.Location, bias, testLocBias1))
+	{
+		DebugStringsComponent->DrawDebugStringAtLocation(TEXT("SEGMENT OUT OF BOUNDS!"), FColor::Emerald, 1.5f, bias);
+		bias = testLocBias1;
+
+		// Trace from nextP to bias to check for more potential navmesh inconsistencies. If there's no valid segment from nextP to bias then we need to clamp it to whatever it can be there.
+		FVector testLocBias1Extra;
+		if(!IsSegmentIsFullyOnNavmesh(nextPoint.Location, bias, testLocBias1Extra))
+		{
+			// Tile stuff
+			GetSafeBiasLocation(bias, originalPathSharedPtr, currentPoint, nextPoint);
+		}
+	}
+}
+
+void AATestingNavigatingActor::GetSafeBiasLocation(FVector& bias, FNavPathSharedPtr path, const FNavPathPoint& currentPoint, const FNavPathPoint& nextPoint) const
+{
+	const FNavMeshPath* navMeshPath = path->CastPath<const FNavMeshPath>();
+	TArray<NavNodeRef> segmentPathPolys;
+	const int32 startIndex = navMeshPath->GetNodeRefIndex(currentPoint.NodeRef);
+
+	uint32 polyID;
+	uint32 tileID;
+	RecastNavMesh->GetPolyTileIndex(currentPoint.NodeRef,polyID,tileID );
+	TArray<FNavPoly> polys;
+	RecastNavMesh->GetPolysInTile(tileID, polys);
+	const int32 endIndex = navMeshPath->GetNodeRefIndex(nextPoint.NodeRef);
+	for(int32 nodeIndex = startIndex; nodeIndex <= endIndex; nodeIndex++)
+	{
+		const NavNodeRef nodeRef = navMeshPath->PathCorridor[nodeIndex];
+		segmentPathPolys.Emplace(nodeRef);
+	}
+	
+	for(FNavPoly& p : polys)
+	{
+		DrawDebugBox(GetWorld(), p.Center, FVector(30,30,30), FColor::Orange, true, -1, 0, 4.f);
+	}
+
+	GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Magenta, TEXT("PASSED CONDITION?"));
+	// for(const NavNodeRef n : segmentPathPolys)
+	// {
+	// 	FVector polyCenter;
+	// 	RecastNavMesh->GetPolyCenter(n, polyCenter);
+	// 	//DrawDebugBox(GetWorld(), polyCenter, FVector(30,30,30), FColor::Orange, true, -1, 0, 4.f);
+	// }
 }
 
